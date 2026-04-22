@@ -1,7 +1,7 @@
 const WeeklyStats = require('../models/WeeklyStats');
 const { config } = require('../config');
 const { weeklyRoles } = require('../config/roles');
-const { getIsoWeekKey } = require('../utils/dateUtils');
+const { getIsoWeekKey, getNextIsoWeekKey } = require('../utils/dateUtils');
 const roleLogService = require('./roleLogService');
 const logger = require('../utils/logger');
 
@@ -11,10 +11,14 @@ class WeeklyService {
     return getIsoWeekKey(new Date());
   }
 
-  getPreviousWeekKey() {
-    const previous = new Date();
+  getPreviousWeekKey(date = new Date()) {
+    const previous = new Date(date);
     previous.setUTCDate(previous.getUTCDate() - 7);
     return getIsoWeekKey(previous);
+  }
+
+  getNextWeekKey(weekKey) {
+    return getNextIsoWeekKey(weekKey);
   }
 
   async incrementStats(payload) {
@@ -113,19 +117,18 @@ class WeeklyService {
     }
   }
 
-  async processWeeklyRoleRotation(client) {
+  async processWeeklyRoleRotationForWeek(client, weekKey = this.getPreviousWeekKey()) {
     // Weekly rotation job: expire old rotating roles, then assign new winners.
-    const previousWeekKey = this.getPreviousWeekKey();
 
     for (const guild of client.guilds.cache.values()) {
       try {
         await this.clearWeeklyRoles(guild);
 
         const [topXpEntry, topMessageEntry] = await Promise.all([
-          WeeklyStats.findOne({ guildId: guild.id, weekKey: previousWeekKey })
+          WeeklyStats.findOne({ guildId: guild.id, weekKey })
             .sort({ xpGained: -1, messageCount: -1 })
             .lean(),
-          WeeklyStats.findOne({ guildId: guild.id, weekKey: previousWeekKey })
+          WeeklyStats.findOne({ guildId: guild.id, weekKey })
             .sort({ messageCount: -1, xpGained: -1 })
             .lean()
         ]);
@@ -135,7 +138,7 @@ class WeeklyService {
             guild,
             topXpEntry.userId,
             weeklyRoles.neuronOfTheWeek,
-            `Top XP performer for ${previousWeekKey}`
+            `Top XP performer for ${weekKey}`
           );
         }
 
@@ -144,7 +147,7 @@ class WeeklyService {
             guild,
             topMessageEntry.userId,
             weeklyRoles.communitySpark,
-            `Most messages for ${previousWeekKey}`
+            `Most messages for ${weekKey}`
           );
         }
       } catch (error) {
@@ -155,7 +158,11 @@ class WeeklyService {
       }
     }
 
-    logger.info('Weekly role rotation completed', { previousWeekKey });
+    logger.info('Weekly role rotation completed', { weekKey });
+  }
+
+  async processWeeklyRoleRotation(client) {
+    return this.processWeeklyRoleRotationForWeek(client);
   }
 }
 

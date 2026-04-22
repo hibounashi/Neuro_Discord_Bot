@@ -1,5 +1,6 @@
 const { EmbedBuilder, SlashCommandBuilder, ChannelType, MessageFlags } = require('discord.js');
 const { aiFieldRoles, levelRoles } = require('../config/roles');
+const reactionRoleService = require('../services/reactionRoleService');
 const permissionService = require('../services/permissionService');
 
 module.exports = {
@@ -91,6 +92,12 @@ module.exports = {
       for (const field of aiFieldRoles) {
         await sentMessage.react(field.emoji).catch(() => null);
       }
+
+      await reactionRoleService.rememberIntroMessage(
+        interaction.guildId,
+        targetChannel.id,
+        sentMessage.id
+      );
 
       await interaction.editReply({
         content: `✅ Introduction posted to ${targetChannel}!\n📌 Message ID: \`${sentMessage.id}\`\n🎓 AI field reactions are active!`
